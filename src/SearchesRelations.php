@@ -4,6 +4,7 @@ namespace Titasgailius\SearchRelations;
 
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Log;
 
 trait SearchesRelations
 {
@@ -40,7 +41,7 @@ trait SearchesRelations
      */
     protected static function isGlobalSearch()
     {
-         return request()->route()->action['uses'] === 'Laravel\Nova\Http\Controllers\SearchController@index';
+        return request()->route()->action['uses'] === 'Laravel\Nova\Http\Controllers\SearchController@index';
     }
 
     /**
@@ -68,9 +69,20 @@ trait SearchesRelations
     protected static function applyRelationSearch(Builder $query, string $search): Builder
     {
         foreach (static::searchableRelations() as $relation => $columns) {
-            $query->orWhereHas($relation, function ($query) use ($columns, $search) {
-                $query->where(static::searchQueryApplier($columns, $search));
-            });
+            $endsWithTranslation = ends_with($relation, '_translations');
+            $relationship = str_replace('_translations', '', $relation);
+
+            if($endsWithTranslation && !str_contains(strtolower(static::$model), $relationship)){
+                $query->orWhereHas($relationship, function ($query) use ($columns, $search) {
+                    $query->whereHas('translations', function ($query) use ($columns, $search) {
+                        $query->where(static::searchQueryApplier($columns, $search));
+                    });
+                });
+            } else {
+                $query->orWhereHas($relation, function ($query) use ($columns, $search) {
+                    $query->where(static::searchQueryApplier($columns, $search));
+                });
+            }
         }
 
         return $query;
